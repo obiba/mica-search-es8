@@ -1,8 +1,8 @@
 http.enabled: false
-script:
-    inline: on
-    indexed: on
-node.local: true
+node:
+    data: false
+    local: false
+    master: false
 discovery.zen.ping.multicast.enabled: false
 index:
     max_ngram_diff: 18
