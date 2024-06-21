@@ -36,7 +36,7 @@
     <opentelemetry-api.version>1.29.0</opentelemetry-api.version>
 
     <!-- maven plugins -->
-    <github-release-plugin.version>1.2.0</github-release-plugin.version>
+    <github-release-plugin.version>1.6.0</github-release-plugin.version>
     <maven-antrun-plugin.version>1.7</maven-antrun-plugin.version>
     <maven-assembly-plugin.version>3.0.0</maven-assembly-plugin.version>
     <maven-compiler-plugin.version>3.1</maven-compiler-plugin.version>
