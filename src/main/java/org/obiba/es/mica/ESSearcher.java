@@ -733,10 +733,14 @@ public class ESSearcher implements Searcher {
           ObjectNode.class);
 
       return response.aggregations().get(aggregationFieldName).sterms().buckets().array().stream()
-          .collect(Collectors.toMap(
-              b -> b.key(),
-              b -> b.aggregations().get("status").sterms().buckets().array().stream()
-                  .collect(Collectors.toMap(sb -> sb.key(), sb -> sb.docCount()))));
+        .collect(Collectors.toMap(
+          b -> b.key().stringValue(),
+          b -> b.aggregations().get("status").sterms().buckets().array().stream()
+            .collect(Collectors.toMap(
+              sb -> sb.key().stringValue(),
+              sb -> sb.docCount()
+            ))
+        ));
     } catch (IndexNotFoundException | IOException e) {
       log.error("Failed to get harmonization aggregation for {} - {}", datasetId, e);
       return null;
