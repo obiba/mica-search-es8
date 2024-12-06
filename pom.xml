@@ -23,7 +23,7 @@
 
     <assertj-core.version>3.8.0</assertj-core.version>
     <easymock.version>5.2.0</easymock.version>
-    <elasticsearch.version>8.15.0</elasticsearch.version>
+    <elasticsearch.version>8.16.1</elasticsearch.version>
     <jna.version>4.1.0</jna.version>
     <junit.version>4.12</junit.version>
     <logback.version>1.4.14</logback.version>
