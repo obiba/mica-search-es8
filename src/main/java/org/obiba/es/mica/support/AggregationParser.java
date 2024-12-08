@@ -120,11 +120,11 @@ public class AggregationParser {
 
               if (!"*".equals(values[0]) || !"*".equals(values[1])) {
                 if ("*".equals(values[0])) {
-                  rangeAggregationBuilder.ranges(AggregationRange.of(a -> a.to(values[1])));
+                  rangeAggregationBuilder.ranges(AggregationRange.of(a -> a.to(Double.valueOf(values[1]))));
                 } else if ("*".equals(values[1])) {
-                  rangeAggregationBuilder.ranges(AggregationRange.of(a -> a.from(values[0])));
+                  rangeAggregationBuilder.ranges(AggregationRange.of(a -> a.from(Double.valueOf(values[0]))));
                 } else {
-                  rangeAggregationBuilder.ranges(AggregationRange.of(a -> a.from(values[0]).to(values[1])));
+                  rangeAggregationBuilder.ranges(AggregationRange.of(a -> a.from(Double.valueOf(values[0])).to(Double.valueOf(values[1]))));
                 }
               }
 

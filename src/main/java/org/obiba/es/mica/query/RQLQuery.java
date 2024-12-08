@@ -10,6 +10,7 @@
 
 package org.obiba.es.mica.query;
 
+import co.elastic.clients.elasticsearch._types.query_dsl.TermRangeQuery;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
@@ -444,26 +445,30 @@ public class RQLQuery implements ESQuery {
 
       BoolQuery.Builder boolQueryBuilder = new BoolQuery.Builder();
       ranges.forEach(range -> {
-        RangeQuery.Builder builder = new RangeQuery.Builder().field(data.getField());
-
         String[] values = range.split(":");
         if (values.length < 2) {
           throw new IllegalArgumentException("Invalid range format: " + range);
         }
 
+        Query rangeQuery = null;
+
         if (!"*".equals(values[0]) || !"*".equals(values[1])) {
           if ("*".equals(values[0])) {
-
-            builder.lt(JsonData.of(values[1]));
+            rangeQuery = Query.of(q -> q
+              .range(r -> r.term(TermRangeQuery.of(t -> t.field(data.getField()).lt(values[1]))))
+            );
           } else if ("*".equals(values[1])) {
-            builder.gte(JsonData.of(values[0]));
+            rangeQuery = Query.of(q -> q
+              .range(r -> r.term(TermRangeQuery.of(t -> t.field(data.getField()).gte(values[0]))))
+            );
           } else {
-            builder.gte(JsonData.of(values[0]));
-            builder.lt(JsonData.of(values[1]));
+            rangeQuery = Query.of(q -> q
+              .range(r -> r.term(TermRangeQuery.of(t -> t.field(data.getField()).gte(values[0]).lt(values[1]))))
+            );
           }
         }
 
-        boolQueryBuilder.should(builder.build()._toQuery());
+        boolQueryBuilder.should(rangeQuery);
       });
 
       return boolQueryBuilder.build()._toQuery();
@@ -509,7 +514,9 @@ public class RQLQuery implements ESQuery {
       Object value = node.getArgument(1);
       visitField(field);
 
-      return RangeQuery.of(q -> q.field(field).lte(JsonData.of(value)))._toQuery();
+      return Query.of(q -> q
+        .range(r -> r.term(TermRangeQuery.of(t -> t.field(field).lte(value.toString()))))
+      );
     }
 
     private Query visitLt(ASTNode node) {
@@ -517,7 +524,9 @@ public class RQLQuery implements ESQuery {
       Object value = node.getArgument(1);
       visitField(field);
 
-      return RangeQuery.of(q -> q.field(field).lt(JsonData.of(value)))._toQuery();
+      return Query.of(q -> q
+        .range(r -> r.term(TermRangeQuery.of(t -> t.field(field).lt(value.toString()))))
+      );
     }
 
     private Query visitGe(ASTNode node) {
@@ -525,7 +534,9 @@ public class RQLQuery implements ESQuery {
       Object value = node.getArgument(1);
       visitField(field);
 
-      return RangeQuery.of(q -> q.field(field).gte(JsonData.of(value)))._toQuery();
+      return Query.of(q -> q
+        .range(r -> r.term(TermRangeQuery.of(t -> t.field(field).gte(value.toString()))))
+      );
     }
 
     private Query visitGt(ASTNode node) {
@@ -533,7 +544,9 @@ public class RQLQuery implements ESQuery {
       Object value = node.getArgument(1);
       visitField(field);
 
-      return RangeQuery.of(q -> q.field(field).gt(JsonData.of(value)))._toQuery();
+      return Query.of(q -> q
+        .range(r -> r.term(TermRangeQuery.of(t -> t.field(field).gt(value.toString()))))
+      );
     }
 
     private Query visitBetween(ASTNode node) {
@@ -541,8 +554,9 @@ public class RQLQuery implements ESQuery {
       visitField(field);
       ArrayList<Object> values = (ArrayList<Object>) node.getArgument(1);
 
-      return RangeQuery.of(q -> q.field(field).gte(JsonData.of(values.get(0))).lte(JsonData.of(values.get(1))))
-          ._toQuery();
+      return Query.of(q -> q
+        .range(r -> r.term(TermRangeQuery.of(t -> t.field(field).gte(values.get(0).toString()).lte(values.get(1).toString()))))
+      );
     }
 
     private Query visitMatch(ASTNode node) {

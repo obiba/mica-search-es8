@@ -124,7 +124,7 @@ public class ESSearcher implements Searcher {
       log.trace("Request /{}/{}: {}", indexName, type, theQuery._get().toString());
 
     TrackHits trackHits = new TrackHits.Builder().enabled(true).build();
-    Aggregation globalAggregation = GlobalAggregation.of(g -> g)._toAggregation();
+    Aggregation globalAggregation = new GlobalAggregation.Builder().build()._toAggregation();
     SourceConfig.Builder sourceConfigBuilder = new SourceConfig.Builder();
 
     if (AGGREGATION == scope) {
@@ -205,7 +205,7 @@ public class ESSearcher implements Searcher {
     try {
       TrackHits trackHits = new TrackHits.Builder().enabled(true).build();
       SourceConfig sourceConfig = new SourceConfig.Builder().fetch(false).build();
-      Aggregation globalAggregation = GlobalAggregation.of(g -> g)._toAggregation();
+      Aggregation globalAggregation = new GlobalAggregation.Builder().build()._toAggregation();
 
       Map<String, Aggregation> aggregations = new HashMap<>();
       aggregations.put(AGG_TOTAL_COUNT, globalAggregation);
@@ -259,7 +259,7 @@ public class ESSearcher implements Searcher {
     try {
       TrackHits trackHits = new TrackHits.Builder().enabled(true).build();
       SourceConfig sourceConfig = new SourceConfig.Builder().fetch(false).build();
-      Aggregation globalAggregation = GlobalAggregation.of(g -> g)._toAggregation();
+      Aggregation globalAggregation = new GlobalAggregation.Builder().build()._toAggregation();
 
       Map<String, Aggregation> aggregations = new HashMap<>();
       aggregations.put(AGG_TOTAL_COUNT, globalAggregation);
@@ -309,7 +309,7 @@ public class ESSearcher implements Searcher {
     try {
       TrackHits trackHits = new TrackHits.Builder().enabled(true).build();
       SourceConfig sourceConfig = new SourceConfig.Builder().fetch(false).build();
-      Aggregation globalAggregation = GlobalAggregation.of(g -> g)._toAggregation();
+      Aggregation globalAggregation = new GlobalAggregation.Builder().build()._toAggregation();
 
       Map<String, Aggregation> aggregations = new HashMap<>();
       aggregations.put(AGG_TOTAL_COUNT, globalAggregation);
