@@ -10,16 +10,18 @@
 
 package org.obiba.es.mica;
 
+import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.json.jackson.JacksonJsonpMapper;
+import co.elastic.clients.transport.rest_client.RestClientTransport;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import net.minidev.json.JSONObject;
 import org.apache.http.ConnectionClosedException;
 import org.apache.http.HttpHost;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.settings.Settings;
@@ -40,14 +42,11 @@ import org.obiba.mica.spi.search.Searcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import co.elastic.clients.elasticsearch.ElasticsearchClient;
-import co.elastic.clients.json.jackson.JacksonJsonpMapper;
-import co.elastic.clients.transport.rest_client.RestClientTransport;
-
 import java.io.File;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.UnknownHostException;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -217,6 +216,15 @@ public class ESSearchEngineService implements SearchEngineService {
   public void createTransportClient(Settings.Builder builder) {
     builder.put("client.transport.sniff", isTransportSniff());
 
+    int maxRetries = getIntProperty("maxRetries", DEFAULT_MAX_RETIRES);
+    long initialBackoffMs = getIntProperty("initialBackoff", DEFAULT_INITIAL_BACKOFF);
+    int backoffMultiplier = getIntProperty("backoffMultiplier", DEFAULT_BACKOFF_MULTIPLIER);
+
+    // Make sure app is not blocked
+    Thread.ofVirtual().start(() -> retryConnection(maxRetries, initialBackoffMs, backoffMultiplier));
+  }
+
+  private HttpHost[] getHttpHosts() {
     List<String> transportAddresses = getTransportAddresses();
     HttpHost[] httpHosts = transportAddresses.stream()
       .map(transportAddress -> {
@@ -232,18 +240,13 @@ public class ESSearchEngineService implements SearchEngineService {
         return new HttpHost(host, port, "http");
       })
       .toArray(HttpHost[]::new);
-
-    int maxRetries = getIntProperty("maxRetries", DEFAULT_MAX_RETIRES);
-    long initialBackoffMs = getIntProperty("initialBackoff", DEFAULT_INITIAL_BACKOFF);
-    int backoffMultiplier = getIntProperty("backoffMultiplier", DEFAULT_BACKOFF_MULTIPLIER);
-
-    // Make sure you do not block the app
-    Thread.ofVirtual().start(() -> retryConnection(httpHosts, maxRetries, initialBackoffMs, backoffMultiplier));
+    return httpHosts;
   }
 
-  private void retryConnection(HttpHost[] httpHosts, int maxRetries, long initialBackoffMs, int backoffMultiplier) {
+  private void retryConnection(int maxRetries, long initialBackoffMs, int backoffMultiplier) {
     try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
       executor.submit(() -> {
+        HttpHost[] httpHosts = getHttpHosts();
         int attempt = 0;
         long backoff = initialBackoffMs;
 
