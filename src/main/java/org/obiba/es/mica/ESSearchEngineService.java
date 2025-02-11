@@ -247,6 +247,8 @@ public class ESSearchEngineService implements SearchEngineService {
     try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
       executor.submit(() -> {
         HttpHost[] httpHosts = getHttpHosts();
+        log.info("Elasticsearch hosts: {}", Arrays.toString(httpHosts));
+
         int attempt = 0;
         long backoff = initialBackoffMs;
 
