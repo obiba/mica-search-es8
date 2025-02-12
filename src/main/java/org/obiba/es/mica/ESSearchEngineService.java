@@ -46,9 +46,11 @@ import java.io.File;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -246,7 +248,8 @@ public class ESSearchEngineService implements SearchEngineService {
   private void retryConnection(int maxRetries, long initialBackoffMs, int backoffMultiplier) {
     try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
       executor.submit(() -> {
-        HttpHost[] httpHosts = getHttpHosts();
+        HttpHost[] httpHosts = addFallbackHosts(getHttpHosts());
+        addFallbackHosts(httpHosts);
         log.info("Elasticsearch hosts: {}", Arrays.toString(httpHosts));
 
         int attempt = 0;
@@ -295,6 +298,27 @@ public class ESSearchEngineService implements SearchEngineService {
         }
       });
     }
+  }
+
+  private HttpHost[] addFallbackHosts(HttpHost[] httpHosts) {
+    Optional<String> fallbackHost = Optional.ofNullable(System.getenv("ELASTICSEARCH_HOST"));
+
+    if (fallbackHost.isPresent()) {
+      String host = fallbackHost.get();
+      List<HttpHost> allHosts = new ArrayList<>(Arrays.asList(httpHosts));
+
+      for (HttpHost httpHost : httpHosts) {
+        if (!host.equalsIgnoreCase(httpHost.getHostName())) {
+          int port = httpHost.getPort();
+          HttpHost newHost = new HttpHost(host, port, "http");
+          allHosts.add(newHost);
+        }
+      }
+
+      return allHosts.toArray(new HttpHost[0]);
+    }
+
+    return httpHosts;
   }
 
   private boolean isRetryableException(IOException e) {
