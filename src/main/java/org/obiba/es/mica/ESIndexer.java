@@ -10,8 +10,14 @@
 
 package org.obiba.es.mica;
 
+import co.elastic.clients.elasticsearch._types.analysis.CharFilter;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.collect.Iterables;
 import com.jayway.jsonpath.Configuration;
 import com.jayway.jsonpath.JsonPath;
@@ -48,10 +54,13 @@ import co.elastic.clients.transport.endpoints.BooleanResponse;
 
 import javax.annotation.Nullable;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.StringReader;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class ESIndexer implements Indexer {
 
@@ -75,7 +84,7 @@ public class ESIndexer implements Indexer {
     log.debug("Indexing for indexName [{}] indexableObject [{}]", indexName, persistable);
     createIndexIfNeeded(indexName);
     IndexRequest<JsonData> indexRequest = getIndexRequestBuilder(indexName, persistable.getId(), toJson(persistable),
-        parent == null ? null : parent.getId());
+      parent == null ? null : parent.getId());
 
     try {
       getClient().index(indexRequest);
@@ -94,7 +103,7 @@ public class ESIndexer implements Indexer {
     log.debug("Indexing for indexName [{}] indexableObject [{}]", indexName, indexable);
     createIndexIfNeeded(indexName);
     IndexRequest<JsonData> indexRequest = getIndexRequestBuilder(indexName, indexable.getId(), toJson(indexable),
-        parent == null ? null : parent.getId());
+      parent == null ? null : parent.getId());
 
     try {
       getClient().index(indexRequest);
@@ -124,7 +133,7 @@ public class ESIndexer implements Indexer {
 
   @Override
   public void indexAll(String indexName, Iterable<? extends Persistable<String>> persistables,
-      Persistable<String> parent) {
+                       Persistable<String> parent) {
 
     log.debug("Indexing all for indexName [{}] persistableObjectNumber [{}]", indexName, Iterables.size(persistables));
 
@@ -134,7 +143,7 @@ public class ESIndexer implements Indexer {
 
     for (Persistable<String> persistable : persistables) {
       br.operations(
-          op -> op.index(idx -> idx.index(indexName).id(persistable.getId()).document(toJsonData(persistable))));
+        op -> op.index(idx -> idx.index(indexName).id(persistable.getId()).document(toJsonData(persistable))));
     }
 
     try {
@@ -144,7 +153,7 @@ public class ESIndexer implements Indexer {
         for (BulkResponseItem item : bulkresponse.items()) {
           if (item.error() != null) {
             log.error("Failed to bulk index {} [{}] - {} :: {}", item.id(), indexName, item.error().type(),
-                item.error().reason());
+              item.error().reason());
           }
         }
       }
@@ -160,9 +169,9 @@ public class ESIndexer implements Indexer {
 
   @Override
   public void indexAllIndexables(String indexName, Iterable<? extends Indexable> indexables,
-      @Nullable String parentId) {
+                                 @Nullable String parentId) {
     log.debug("Indexing all indexables for indexName [{}] persistableObjectNumber [{}]", indexName,
-        Iterables.size(indexables));
+      Iterables.size(indexables));
     createIndexIfNeeded(indexName);
 
     BulkRequest.Builder br = new BulkRequest.Builder();
@@ -179,7 +188,7 @@ public class ESIndexer implements Indexer {
         for (BulkResponseItem item : bulkresponse.items()) {
           if (item.error() != null) {
             log.error("Failed to bulk index {} [{}] - {} :: {}", item.id(), indexName, item.error().type(),
-                item.error().reason());
+              item.error().reason());
           }
         }
       }
@@ -214,10 +223,10 @@ public class ESIndexer implements Indexer {
       return;
 
     DeleteByQueryRequest deleteRequest = DeleteByQueryRequest.of(r -> r
-        .index(indexName)
-        .query(q -> q
-            .term(t -> t
-                .field(termQuery.getKey()).value(termQuery.getValue()))));
+      .index(indexName)
+      .query(q -> q
+        .term(t -> t
+          .field(termQuery.getKey()).value(termQuery.getValue()))));
 
     try {
       getClient().deleteByQuery(deleteRequest);
@@ -228,7 +237,7 @@ public class ESIndexer implements Indexer {
 
   @Override
   public void delete(String indexName, String type, Map.Entry<String, String> termQuery) {
-    delete(indexName, type != null ? new String[] { type } : null, termQuery);
+    delete(indexName, type != null ? new String[]{type} : null, termQuery);
   }
 
   @Override
@@ -270,9 +279,9 @@ public class ESIndexer implements Indexer {
       Map<String, Property> mappingProperties = record.mappings().properties();
 
       String recordAsString = Configuration.defaultConfiguration().jsonProvider()
-          .toJson(processMappingProperties(mappingProperties));
+        .toJson(processMappingProperties(mappingProperties));
       return JsonPath.using(Configuration.defaultConfiguration().addOptions(Option.ALWAYS_RETURN_LIST))
-          .parse(recordAsString);
+        .parse(recordAsString);
     } catch (IOException e) {
       log.error("Failed to drop index index {} - {}", indexName, e);
     }
@@ -340,7 +349,7 @@ public class ESIndexer implements Indexer {
 
   private IndexRequest<JsonData> getIndexRequestBuilder(String indexName, String id, String source, String parentId) {
     IndexRequest<JsonData> request = IndexRequest
-        .of(r -> r.index(indexName).id(id).routing(parentId).withJson(new StringReader(source)));
+      .of(r -> r.index(indexName).id(id).routing(parentId).withJson(new StringReader(source)));
     return request;
   }
 
@@ -352,19 +361,21 @@ public class ESIndexer implements Indexer {
       log.info("Creating index {}", indexName);
 
       IndexSettings.Builder indexSettingsBuilder = new IndexSettings.Builder();
+      String settingsAsString = addCharFilter(esSearchService.getIndexSettings());
 
       if (!esSearchService.getIndexSettings().equals("{}")) {
-        indexSettingsBuilder.withJson(new StringReader(esSearchService.getIndexSettings()));
+        indexSettingsBuilder.withJson(new StringReader(settingsAsString));
       }
 
       IndexSettings settings = indexSettingsBuilder
-          .numberOfReplicas(Integer.toString(esSearchService.getNbReplicas()))
-          .numberOfShards(Integer.toString(esSearchService.getNbShards())).build();
+        .numberOfReplicas(Integer.toString(esSearchService.getNbReplicas()))
+        .numberOfShards(Integer.toString(esSearchService.getNbShards())).build();
+
       try {
         CreateIndexResponse createdResponse = indicesAdmin
-            .create(CreateIndexRequest.of(r -> r.index(indexName).settings(settings)));
+          .create(CreateIndexRequest.of(r -> r.index(indexName).settings(settings)));
         esSearchService.getIndexConfigurationListeners()
-            .forEach(listener -> listener.onIndexCreated(esSearchService, indexName));
+          .forEach(listener -> listener.onIndexCreated(esSearchService, indexName));
 
         return createdResponse;
       } catch (IOException e) {
@@ -373,6 +384,73 @@ public class ESIndexer implements Indexer {
     }
 
     return null;
+  }
+
+  private String addCharFilter(String settings) {
+    InputStream input = getClass().getClassLoader().getResourceAsStream("elasticsearch/char-filter.json");
+
+    if (input != null) {
+      try {
+        JsonNode defaultMappings = new ObjectMapper().readTree(input);
+
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
+        JsonNode jsonSettings = mapper.readTree(settings);
+        ObjectNode analysisNode = (ObjectNode) jsonSettings.path("analysis");
+        ObjectNode targetCharFilters = (ObjectNode) analysisNode.with("char_filter");
+
+        if (!targetCharFilters.has("rql_safe_encoder") && defaultMappings.has("rql_safe_encoder")) {
+          targetCharFilters.set("rql_safe_encoder", defaultMappings.get("rql_safe_encoder"));
+        }
+
+        defaultMappings.fieldNames().forEachRemaining(key -> {
+          if (!targetCharFilters.has(key)) {
+            targetCharFilters.set(key, defaultMappings.get(key));
+          } else {
+            ArrayNode existingMappings = (ArrayNode) targetCharFilters.get("rql_safe_encoder").get("mappings");
+            ArrayNode defaultMappingsArray = (ArrayNode) defaultMappings.get("rql_safe_encoder").get("mappings");
+
+            Set<String> existingValues = new HashSet<>();
+            Set<String> existingKeys = new HashSet<>();
+            for (JsonNode node : existingMappings) {
+              String[] parts = node.asText().split("=>", 2);
+              if (parts.length == 2) {
+                existingKeys.add(parts[0].trim());
+              }
+            }
+
+            for (JsonNode node : defaultMappingsArray) {
+              String[] parts = node.asText().split("=>", 2);
+              if (parts.length == 2 && !existingKeys.contains(parts[0].trim())) {
+                existingMappings.add(node);
+              }
+            }
+          }
+        });
+
+        // Ensure rql_safe_encoder is listed in both analyzers' char_filter arrays
+        ObjectNode analyzers = (ObjectNode) analysisNode.with("analyzer");
+        for (String analyzerName : List.of("mica_index_analyzer", "mica_search_analyzer")) {
+          ArrayNode charFilterArray = (ArrayNode) analyzers.with(analyzerName).withArray("char_filter");
+          boolean exists = false;
+          for (JsonNode node : charFilterArray) {
+            if (node.asText().equals("rql_safe_encoder")) {
+              exists = true;
+              break;
+            }
+          }
+          if (!exists) {
+            charFilterArray.add("rql_safe_encoder");
+          }
+        }
+
+        return new ObjectMapper().writeValueAsString(jsonSettings);
+      } catch (IOException ignore) {
+        log.warn("Char filter config file '{}' not found!", "elasticsearch/char-filter.json");
+      }
+    }
+
+    return settings;
   }
 
   private static class IndexFieldMappingImpl implements IndexFieldMapping {
