@@ -61,6 +61,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
+import java.util.stream.StreamSupport;
 
 public class ESIndexer implements Indexer {
 
@@ -386,71 +388,70 @@ public class ESIndexer implements Indexer {
     return null;
   }
 
-  private String addCharFilter(String settings) {
-    InputStream input = getClass().getClassLoader().getResourceAsStream("elasticsearch/char-filter.json");
+  private String addCharFilter(String indexSettings) {
+    try (InputStream input = getClass().getClassLoader().getResourceAsStream("elasticsearch/char-filter.json")) {
+      if (input == null) return indexSettings;
 
-    if (input != null) {
-      try {
-        JsonNode defaultMappings = new ObjectMapper().readTree(input);
+      ObjectMapper mapper = new ObjectMapper().setSerializationInclusion(JsonInclude.Include.NON_NULL);
+      JsonNode defaultMappings = mapper.readTree(input);
+      JsonNode defaultEncoder = defaultMappings.get("rql_safe_encoder");
 
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
-        JsonNode jsonSettings = mapper.readTree(settings);
-        ObjectNode analysisNode = (ObjectNode) jsonSettings.path("analysis");
-        ObjectNode targetCharFilters = (ObjectNode) analysisNode.with("char_filter");
+      JsonNode jsonIndexSettings = mapper.readTree(indexSettings);
+      ObjectNode analysisNode = (ObjectNode) jsonIndexSettings.path("analysis");
+      ObjectNode targetCharFilters = (ObjectNode) analysisNode.with("char_filter");
 
-        if (!targetCharFilters.has("rql_safe_encoder") && defaultMappings.has("rql_safe_encoder")) {
-          targetCharFilters.set("rql_safe_encoder", defaultMappings.get("rql_safe_encoder"));
-        }
 
-        defaultMappings.fieldNames().forEachRemaining(key -> {
-          if (!targetCharFilters.has(key)) {
-            targetCharFilters.set(key, defaultMappings.get(key));
-          } else {
-            ArrayNode existingMappings = (ArrayNode) targetCharFilters.get("rql_safe_encoder").get("mappings");
-            ArrayNode defaultMappingsArray = (ArrayNode) defaultMappings.get("rql_safe_encoder").get("mappings");
-
-            Set<String> existingValues = new HashSet<>();
-            Set<String> existingKeys = new HashSet<>();
-            for (JsonNode node : existingMappings) {
-              String[] parts = node.asText().split("=>", 2);
-              if (parts.length == 2) {
-                existingKeys.add(parts[0].trim());
-              }
-            }
-
-            for (JsonNode node : defaultMappingsArray) {
-              String[] parts = node.asText().split("=>", 2);
-              if (parts.length == 2 && !existingKeys.contains(parts[0].trim())) {
-                existingMappings.add(node);
-              }
-            }
-          }
-        });
-
-        // Ensure rql_safe_encoder is listed in both analyzers' char_filter arrays
-        ObjectNode analyzers = (ObjectNode) analysisNode.with("analyzer");
-        for (String analyzerName : List.of("mica_index_analyzer", "mica_search_analyzer")) {
-          ArrayNode charFilterArray = (ArrayNode) analyzers.with(analyzerName).withArray("char_filter");
-          boolean exists = false;
-          for (JsonNode node : charFilterArray) {
-            if (node.asText().equals("rql_safe_encoder")) {
-              exists = true;
-              break;
-            }
-          }
-          if (!exists) {
-            charFilterArray.add("rql_safe_encoder");
-          }
-        }
-
-        return new ObjectMapper().writeValueAsString(jsonSettings);
-      } catch (IOException ignore) {
-        log.warn("Char filter config file '{}' not found!", "elasticsearch/char-filter.json");
+      // Add rql_safe_encoder if missing
+      if (!targetCharFilters.has("rql_safe_encoder") && defaultEncoder != null) {
+        targetCharFilters.set("rql_safe_encoder", defaultEncoder);
       }
-    }
 
-    return settings;
+      // Merge only missing char_filter entries
+      defaultMappings.fieldNames().forEachRemaining(key -> {
+        if (!targetCharFilters.has(key)) {
+          targetCharFilters.set(key, defaultMappings.get(key));
+        }
+      });
+
+      // Merge missing mappings inside rql_safe_encoder
+      if (targetCharFilters.has("rql_safe_encoder") && defaultEncoder != null) {
+        ArrayNode existingMappings = (ArrayNode) targetCharFilters.get("rql_safe_encoder").get("mappings");
+        ArrayNode defaultMappingsArray = (ArrayNode) defaultEncoder.get("mappings");
+
+        Set<String> existingKeys = new HashSet<>();
+        for (JsonNode node : existingMappings) {
+          String[] parts = node.asText().split("=>", 2);
+          if (parts.length == 2) {
+            existingKeys.add(parts[0].trim());
+          }
+        }
+
+        for (JsonNode node : defaultMappingsArray) {
+          String[] parts = node.asText().split("=>", 2);
+          if (parts.length == 2 && !existingKeys.contains(parts[0].trim())) {
+            existingMappings.add(node);
+          }
+        }
+      }
+
+      Predicate<ArrayNode> containsRqlSafeEncoder = array ->
+        StreamSupport.stream(array.spliterator(), false)
+          .anyMatch(node -> "rql_safe_encoder".equals(node.asText()));
+
+      // Ensure "rql_safe_encoder" appears in both analyzers
+      ObjectNode analyzers = (ObjectNode) analysisNode.with("analyzer");
+      for (String analyzerName : List.of("mica_index_analyzer", "mica_search_analyzer")) {
+        ArrayNode charFilterArray = (ArrayNode) analyzers.with(analyzerName).withArray("char_filter");
+        if (!containsRqlSafeEncoder.test(charFilterArray)) {
+          charFilterArray.add("rql_safe_encoder");
+        }
+      }
+
+      return mapper.writeValueAsString(jsonIndexSettings);
+    } catch (IOException e) {
+      log.warn("Failed to apply char filter from config: {}", e.getMessage());
+      return indexSettings;
+    }
   }
 
   private static class IndexFieldMappingImpl implements IndexFieldMapping {
