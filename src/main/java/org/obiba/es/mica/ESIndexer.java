@@ -62,6 +62,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
 public class ESIndexer implements Indexer {
@@ -389,70 +390,63 @@ public class ESIndexer implements Indexer {
   }
 
   private String addCharFilter(String indexSettings) {
-    try (InputStream input = getClass().getClassLoader().getResourceAsStream("elasticsearch/char-filter.json")) {
-      if (input == null) return indexSettings;
-
+    try {
       ObjectMapper mapper = new ObjectMapper().setSerializationInclusion(JsonInclude.Include.NON_NULL);
-      JsonNode defaultMappings = mapper.readTree(input);
-      JsonNode defaultEncoder = defaultMappings.get("rql_safe_encoder");
+      JsonNode settingsNode = mapper.readTree(indexSettings);
+      ObjectNode analysisNode = (ObjectNode) settingsNode.path("analysis");
+      ObjectNode charFilters = (ObjectNode) analysisNode.with("char_filter");
 
-      JsonNode jsonIndexSettings = mapper.readTree(indexSettings);
-      ObjectNode analysisNode = (ObjectNode) jsonIndexSettings.path("analysis");
-      ObjectNode targetCharFilters = (ObjectNode) analysisNode.with("char_filter");
+      // Load from factory (already parsed as a Map<String, String>)
+      Map<String, String> codecMap = esSearchService.getConfigurationProvider().getSpecialCharMapping();
 
+      // Reverse the mapping for char_filter since the mapping is for search analyzer
+      Map<String, String> reversedMap = codecMap.entrySet().stream()
+        .collect(Collectors.toMap(Map.Entry::getValue, Map.Entry::getKey));
 
-      // Add rql_safe_encoder if missing
-      if (!targetCharFilters.has("rql_safe_encoder") && defaultEncoder != null) {
-        targetCharFilters.set("rql_safe_encoder", defaultEncoder);
-      }
+      // Build char_filter JSON structure from reversed map
+      ArrayNode mappingsNode = mapper.createArrayNode();
+      reversedMap.forEach((encoded, original) -> mappingsNode.add(encoded + " => " + original));
 
-      // Merge only missing char_filter entries
-      defaultMappings.fieldNames().forEachRemaining(key -> {
-        if (!targetCharFilters.has(key)) {
-          targetCharFilters.set(key, defaultMappings.get(key));
-        }
-      });
+      ObjectNode rqlSafeEncoderNode = mapper.createObjectNode();
+      rqlSafeEncoderNode.put("type", "mapping");
+      rqlSafeEncoderNode.set("mappings", mappingsNode);
 
-      // Merge missing mappings inside rql_safe_encoder
-      if (targetCharFilters.has("rql_safe_encoder") && defaultEncoder != null) {
-        ArrayNode existingMappings = (ArrayNode) targetCharFilters.get("rql_safe_encoder").get("mappings");
-        ArrayNode defaultMappingsArray = (ArrayNode) defaultEncoder.get("mappings");
+      // Add or merge rql_safe_encoder
+      if (!charFilters.has("rql_safe_encoder")) {
+        charFilters.set("rql_safe_encoder", rqlSafeEncoderNode);
+      } else {
+        ArrayNode existing = (ArrayNode) charFilters.get("rql_safe_encoder").get("mappings");
+        Set<String> existingKeys = StreamSupport.stream(existing.spliterator(), false)
+          .map(JsonNode::asText)
+          .map(m -> m.split("=>", 2)[0].trim())
+          .collect(Collectors.toSet());
 
-        Set<String> existingKeys = new HashSet<>();
-        for (JsonNode node : existingMappings) {
-          String[] parts = node.asText().split("=>", 2);
-          if (parts.length == 2) {
-            existingKeys.add(parts[0].trim());
-          }
-        }
-
-        for (JsonNode node : defaultMappingsArray) {
+        for (JsonNode node : mappingsNode) {
           String[] parts = node.asText().split("=>", 2);
           if (parts.length == 2 && !existingKeys.contains(parts[0].trim())) {
-            existingMappings.add(node);
+            existing.add(node);
           }
         }
       }
 
-      Predicate<ArrayNode> containsRqlSafeEncoder = array ->
-        StreamSupport.stream(array.spliterator(), false)
-          .anyMatch(node -> "rql_safe_encoder".equals(node.asText()));
-
-      // Ensure "rql_safe_encoder" appears in both analyzers
+      // Add to analyzer (search only)
       ObjectNode analyzers = (ObjectNode) analysisNode.with("analyzer");
-      for (String analyzerName : List.of("mica_index_analyzer", "mica_search_analyzer")) {
-        ArrayNode charFilterArray = (ArrayNode) analyzers.with(analyzerName).withArray("char_filter");
-        if (!containsRqlSafeEncoder.test(charFilterArray)) {
-          charFilterArray.add("rql_safe_encoder");
-        }
+      ArrayNode searchCharFilters = (ArrayNode) analyzers.with("mica_search_analyzer").withArray("char_filter");
+
+      boolean alreadyIncluded = StreamSupport.stream(searchCharFilters.spliterator(), false)
+        .anyMatch(n -> "rql_safe_encoder".equals(n.asText()));
+
+      if (!alreadyIncluded) {
+        searchCharFilters.add("rql_safe_encoder");
       }
 
-      return mapper.writeValueAsString(jsonIndexSettings);
+      return mapper.writeValueAsString(settingsNode);
     } catch (IOException e) {
       log.warn("Failed to apply char filter from config: {}", e.getMessage());
       return indexSettings;
     }
   }
+
 
   private static class IndexFieldMappingImpl implements IndexFieldMapping {
 
