@@ -60,8 +60,12 @@ public class StudyIndexConfiguration extends AbstractIndexConfiguration {
     Taxonomy taxonomy = getTaxonomy();
     addLocalizedVocabularies(taxonomy, "name", "acronym");
     List<String> ignore = Lists.newArrayList(
-        "id");
+        "id", "acronym", "name");
     addTaxonomyFields(mapping, taxonomy, ignore);
+
+    createLocalizedMappingWithAnalyzersAndSort(mapping, "acronym");
+    createLocalizedMappingWithAnalyzersAndSort(mapping, "name");
+
     mapping.endObject().endObject();
 
     return mapping;

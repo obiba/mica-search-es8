@@ -132,6 +132,16 @@ public abstract class AbstractIndexConfiguration implements Indexer.IndexConfigu
     }
   }
 
+  protected void createMappingWithAnalyzersAndSortNonLocalized(XContentBuilder mapping, String name) {
+    try {
+      mapping.startObject(name);
+      createMappingWithAnalyzersAndSort(mapping, name);
+      mapping.endObject();
+    } catch (IOException e) {
+      log.error("Failed to create mappings with sort: '{}'", e);
+    }
+  }
+
   protected void createMappingWithAnalyzers(XContentBuilder mapping, String name) throws IOException {
     mapping
         .field("type", "keyword")
@@ -143,6 +153,45 @@ public abstract class AbstractIndexConfiguration implements Indexer.IndexConfigu
         .field("search_analyzer", "mica_search_analyzer")
         .endObject()
         .endObject();
+  }
+
+  protected void createMappingWithAnalyzersAndSort(XContentBuilder mapping, String name) throws IOException {
+    mapping
+        .field("type", "keyword")
+        .startObject("fields")
+        .field("analyzed")
+        .startObject()
+        .field("type", "text")
+        .field("analyzer", "mica_index_analyzer")
+        .field("search_analyzer", "mica_search_analyzer")
+        .endObject()
+        .field("sort")
+        .startObject()
+        .field("type", "keyword")
+        .field("normalizer", "lowercase_normalizer")
+        .endObject()
+        .endObject();
+  }
+
+  protected void createLocalizedMappingWithAnalyzersAndSort(XContentBuilder mapping, String name) {
+    try {
+      mapping.startObject(name);
+      mapping.startObject("properties");
+      Stream.concat(configurationProvider.getLocales().stream(), Stream.of(
+          LANGUAGE_TAG_UNDETERMINED)).forEach(locale -> {
+            try {
+              mapping.startObject(locale);
+              createMappingWithAnalyzersAndSort(mapping, locale);
+              mapping.endObject();
+            } catch (IOException e) {
+              log.error("Failed to create localized mappings with sort: '{}'", e);
+            }
+          });
+      mapping.endObject();
+      mapping.endObject();
+    } catch (IOException e) {
+      log.error("Failed to create localized mappings with sort: '{}'", e);
+    }
   }
 
   protected void appendMembershipProperties(XContentBuilder mapping) throws IOException {

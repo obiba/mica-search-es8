@@ -78,7 +78,7 @@ public class VariableIndexConfiguration extends AbstractIndexConfiguration {
       createMappingWithoutAnalyzer(mapping, "opalTableType");
       createMappingWithoutAnalyzer(mapping, "source");
     }
-    createMappingWithAndWithoutAnalyzer(mapping, "name");
+    createMappingWithAnalyzersAndSortNonLocalized(mapping, "name");
     createMappingWithoutAnalyzer(mapping, "entityType");
     createMappingWithoutAnalyzer(mapping, "variableType");
     createMappingWithoutAnalyzer(mapping, "valueType");
