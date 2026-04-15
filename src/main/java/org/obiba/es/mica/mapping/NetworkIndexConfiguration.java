@@ -42,11 +42,13 @@ public class NetworkIndexConfiguration extends AbstractIndexConfiguration {
         Indexer.PUBLISHED_NETWORK_INDEX.equals(indexName)) {
       try {
         XContentBuilder properties = createMappingProperties();
+        String mappingJson = Strings.toString(properties);
+        log.info("Applying network index mapping for '{}': {}", indexName, mappingJson);
 
         getClient(searchEngineService)
             .indices()
             .putMapping(
-                PutMappingRequest.of(r -> r.index(indexName).withJson(new StringReader(Strings.toString(properties)))));
+                PutMappingRequest.of(r -> r.index(indexName).withJson(new StringReader(mappingJson))));
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
@@ -59,11 +61,14 @@ public class NetworkIndexConfiguration extends AbstractIndexConfiguration {
     mapping.startObject("properties");
     Taxonomy taxonomy = getTaxonomy();
     taxonomy.addVocabulary(newVocabularyBuilder().name("raw_id").field("id").staticField().build());
-    addLocalizedVocabularies(taxonomy, "acronym", "name", "description");
+    addLocalizedVocabularies(taxonomy, "description");
     List<String> ignore = Lists.newArrayList(
-        "id");
+        "id", "acronym", "name");
 
     addTaxonomyFields(mapping, taxonomy, ignore);
+
+    createLocalizedMappingWithAnalyzersAndSort(mapping, "acronym");
+    createLocalizedMappingWithAnalyzersAndSort(mapping, "name");
 
     mapping.endObject().endObject();
     return mapping;

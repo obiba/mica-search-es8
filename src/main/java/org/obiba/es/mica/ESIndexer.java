@@ -405,6 +405,13 @@ public class ESIndexer implements Indexer {
       return analyzed;
     }
 
+    @Override
+    public boolean isSortable(String fieldName) {
+      if (context == null) return false;
+      List<Object> result = context.read(String.format("$..%s..sort", fieldName.replaceAll("\\.", "..")));
+      return result.size() > 0;
+    }
+
   }
 
 }

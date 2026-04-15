@@ -11,6 +11,7 @@
 package org.obiba.es.mica.mapping;
 
 import com.google.common.collect.Lists;
+import java.util.List;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.xcontent.XContentBuilder;
 import org.elasticsearch.xcontent.XContentFactory;
@@ -56,7 +57,12 @@ public class DatasetIndexConfiguration extends AbstractIndexConfiguration {
         "harmonizationTables.studyId");
     // TODO use DATASET_LOCALIZED_ANALYZED_FIELDS
     addLocalizedVocabularies(taxonomy, "name", "acronym", "description");
-    addTaxonomyFields(mapping, taxonomy, Lists.newArrayList());
+    List<String> ignore = Lists.newArrayList("acronym", "name");
+    addTaxonomyFields(mapping, taxonomy, ignore);
+
+    createLocalizedMappingWithAnalyzersAndSort(mapping, "acronym");
+    createLocalizedMappingWithAnalyzersAndSort(mapping, "name");
+
     mapping.endObject().endObject();
 
     return mapping;

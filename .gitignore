@@ -9,3 +9,6 @@ atlassian-ide-plugin.xml
 *.pyc
 *.log
 .history
+.agent-sandbox
+.serena
+

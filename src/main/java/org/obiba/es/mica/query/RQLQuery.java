@@ -299,6 +299,10 @@ public class RQLQuery implements ESQuery {
       return rqlFieldResolver.resolveFieldUnanalyzed(rqlField);
     }
 
+    protected RQLFieldResolver.FieldData resolveFieldForSort(String rqlField) {
+      return rqlFieldResolver.resolveFieldForSort(rqlField);
+    }
+
     protected Vocabulary getVocabulary(String taxonomyName, String vocabularyName) {
       Optional<Taxonomy> taxonomy = rqlFieldResolver.getTaxonomies().stream()
           .filter(t -> t.getName().equals(taxonomyName)).findFirst();
@@ -758,11 +762,11 @@ public class RQLQuery implements ESQuery {
 
     private SortBuilder processArgument(String arg) {
       if (arg.startsWith("-"))
-        return SortBuilders.fieldSort(resolveFieldUnanalyzed(arg.substring(1)).getField()).order(SortOrder.DESC);
+        return SortBuilders.fieldSort(resolveFieldForSort(arg.substring(1)).getField()).order(SortOrder.DESC);
       else if (arg.startsWith("+"))
-        return SortBuilders.fieldSort(resolveFieldUnanalyzed(arg.substring(1)).getField()).order(SortOrder.ASC);
+        return SortBuilders.fieldSort(resolveFieldForSort(arg.substring(1)).getField()).order(SortOrder.ASC);
       else
-        return SortBuilders.fieldSort(resolveFieldUnanalyzed(arg).getField()).order(SortOrder.ASC);
+        return SortBuilders.fieldSort(resolveFieldForSort(arg).getField()).order(SortOrder.ASC);
     }
 
   }
