@@ -128,6 +128,11 @@ public class ESIndexer implements Indexer {
 
     log.debug("Indexing all for indexName [{}] persistableObjectNumber [{}]", indexName, Iterables.size(persistables));
 
+    if (!persistables.iterator().hasNext()) {
+      log.debug("No persistables to index for indexName [{}]", indexName);
+      return;
+    }
+
     createIndexIfNeeded(indexName);
 
     BulkRequest.Builder br = new BulkRequest.Builder();
@@ -163,6 +168,12 @@ public class ESIndexer implements Indexer {
       @Nullable String parentId) {
     log.debug("Indexing all indexables for indexName [{}] persistableObjectNumber [{}]", indexName,
         Iterables.size(indexables));
+
+    if (!indexables.iterator().hasNext()) {
+      log.debug("No indexables to index for indexName [{}]", indexName);
+      return;
+    }
+
     createIndexIfNeeded(indexName);
 
     BulkRequest.Builder br = new BulkRequest.Builder();
