@@ -1,4 +1,5 @@
-# mica-search-es8 [![Build Status](https://travis-ci.org/obiba/mica-search-es8.svg?branch=master)](https://travis-ci.org/obiba/mica-search-es8)
+# mica-search-es8
+[![CI](https://github.com/obiba/mica-search-es8/actions/workflows/ci.yml/badge.svg)](https://github.com/obiba/mica-search-es8/actions/workflows/ci.yml)
 
 [Mica](https://github.com/obiba/mica2) is OBiBa's web data portal application server.
 
