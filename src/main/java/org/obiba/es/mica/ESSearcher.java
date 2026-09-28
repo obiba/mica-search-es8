@@ -51,6 +51,7 @@ import org.slf4j.LoggerFactory;
 import javax.annotation.Nullable;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.io.InputStream;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -228,7 +229,7 @@ public class ESSearcher implements Searcher {
           .aggregations(aggregations),
           ObjectNode.class);
     } catch (IOException e) {
-      log.error("Failed to cover {} - {}", indexName, e);
+      throw new UncheckedIOException(String.format("Failed to cover %s", indexName), e);
     }
 
     log.debug("Response /{}/{}", indexName, type);
@@ -280,7 +281,7 @@ public class ESSearcher implements Searcher {
           .aggregations(aggregations),
           ObjectNode.class);
     } catch (IOException e) {
-      log.error("Failed to cover {} - {}", indexName, e);
+      throw new UncheckedIOException(String.format("Failed to cover %s", indexName), e);
     }
     log.debug("Response /{}/{}", indexName, type);
     if (log.isTraceEnabled())
@@ -330,7 +331,7 @@ public class ESSearcher implements Searcher {
           .aggregations(aggregations),
           ObjectNode.class);
     } catch (IOException e) {
-      log.error("Failed to aggregate {} - {}", indexName, e);
+      throw new UncheckedIOException(String.format("Failed to aggregate %s", indexName), e);
     }
     log.debug("Response /{}/{}", indexName, type);
     if (log.isTraceEnabled())
@@ -385,7 +386,7 @@ public class ESSearcher implements Searcher {
           .sort(sortOptions),
           ObjectNode.class);
     } catch (IOException e) {
-      log.error("Failed to find {} - {}", indexName, e);
+      throw new UncheckedIOException(String.format("Failed to find %s", indexName), e);
     }
     log.debug("Response /{}/{}", indexName, type);
 
@@ -464,7 +465,7 @@ public class ESSearcher implements Searcher {
           .aggregations(aggregations),
           ObjectNode.class);
     } catch (IOException e) {
-      log.error("Failed to count {} - {}", indexName, e);
+      throw new UncheckedIOException(String.format("Failed to count %s", indexName), e);
     }
     log.debug("Response /{}/{}", indexName, type);
 
@@ -614,7 +615,7 @@ public class ESSearcher implements Searcher {
           .sort(sortOption),
           ObjectNode.class);
     } catch (IOException e) {
-      log.error("Failed to get documents by class name{} - {}", indexName, e);
+      throw new UncheckedIOException(String.format("Failed to get documents by class name %s", indexName), e);
     }
     log.debug("Response /{}/{}", indexName, type);
 
@@ -669,7 +670,7 @@ public class ESSearcher implements Searcher {
           .sort(sortOption),
           ObjectNode.class);
     } catch (IOException e) {
-      log.error("Failed to get documents {} - {}", indexName, e);
+      throw new UncheckedIOException(String.format("Failed to get documents %s", indexName), e);
     }
     log.debug("Response /{}/{}", indexName, type);
 
