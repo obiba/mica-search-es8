@@ -13,6 +13,7 @@ package org.obiba.es.mica.query;
 import net.jazdw.rql.parser.ASTNode;
 import net.jazdw.rql.parser.RQLParser;
 import org.elasticsearch.common.Strings;
+import org.obiba.es.mica.ESIndexFieldMapping;
 import org.obiba.mica.spi.search.ConfigurationProvider;
 import org.obiba.mica.spi.search.IndexFieldMapping;
 import org.obiba.mica.spi.search.Indexer;
@@ -139,20 +140,16 @@ public class RQLJoinQuery implements JoinQuery {
     nodeTypes.add(rqlNode);
     switch (rqlNode) {
       case VARIABLE:
-        variableQuery = new RQLQuery(node, new RQLFieldResolver(rqlNode, getVariableTaxonomies(), locale,
-            getVariableIndexMapping()));
+        variableQuery = newQuery(node, rqlNode, getVariableTaxonomies(), getVariableIndexMapping());
         break;
       case DATASET:
-        datasetQuery = new RQLQuery(node, new RQLFieldResolver(rqlNode, getDatasetTaxonomies(), locale,
-            getDatasetIndexMapping()));
+        datasetQuery = newQuery(node, rqlNode, getDatasetTaxonomies(), getDatasetIndexMapping());
         break;
       case STUDY:
-        studyQuery = new RQLQuery(node, new RQLFieldResolver(rqlNode, getStudyTaxonomies(), locale,
-            getStudyIndexMapping()));
+        studyQuery = newQuery(node, rqlNode, getStudyTaxonomies(), getStudyIndexMapping());
         break;
       case NETWORK:
-        networkQuery = new RQLQuery(node, new RQLFieldResolver(rqlNode, getNetworkTaxonomies(), locale,
-            getNetworkIndexMapping()));
+        networkQuery = newQuery(node, rqlNode, getNetworkTaxonomies(), getNetworkIndexMapping());
         break;
       case LOCALE:
         if (node.getArgumentsSize() > 0)
@@ -162,6 +159,11 @@ public class RQLJoinQuery implements JoinQuery {
         withFacets = true;
         break;
     }
+  }
+
+  private RQLQuery newQuery(ASTNode node, RQLNode rqlNode, List<Taxonomy> taxonomies, IndexFieldMapping mapping) {
+    ESIndexFieldMapping esMapping = mapping instanceof ESIndexFieldMapping m ? m : null;
+    return new RQLQuery(node, new RQLFieldResolver(rqlNode, taxonomies, locale, mapping), () -> esMapping);
   }
 
   private void initializeLocale(ASTNode node) {

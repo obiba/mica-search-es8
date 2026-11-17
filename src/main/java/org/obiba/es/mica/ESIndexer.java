@@ -12,6 +12,7 @@ package org.obiba.es.mica;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Iterables;
 import com.jayway.jsonpath.Configuration;
 import com.jayway.jsonpath.JsonPath;
@@ -264,8 +265,9 @@ public class ESIndexer implements Indexer {
   }
 
   @Override
-  public IndexFieldMapping getIndexfieldMapping(String indexName, String type) {
-    return new IndexFieldMappingImpl(hasIndex(indexName) ? getContext(indexName, type) : null);
+  public ESIndexFieldMapping getIndexfieldMapping(String indexName, String type) {
+    return new IndexFieldMappingImpl(hasIndex(indexName) ? getContext(indexName, type) : null,
+        esSearchService.isCaseInsensitiveSort());
   }
 
   //
@@ -386,12 +388,16 @@ public class ESIndexer implements Indexer {
     return null;
   }
 
-  private static class IndexFieldMappingImpl implements IndexFieldMapping {
+  @VisibleForTesting
+  static class IndexFieldMappingImpl implements ESIndexFieldMapping {
 
     private final ReadContext context;
 
-    IndexFieldMappingImpl(ReadContext ctx) {
+    private final boolean caseInsensitiveSort;
+
+    IndexFieldMappingImpl(ReadContext ctx, boolean caseInsensitiveSort) {
       this.context = ctx;
+      this.caseInsensitiveSort = caseInsensitiveSort;
     }
 
     @Override
@@ -407,7 +413,7 @@ public class ESIndexer implements Indexer {
 
     @Override
     public boolean isSortable(String fieldName) {
-      if (context == null) return false;
+      if (!caseInsensitiveSort || context == null || fieldName == null || fieldName.isEmpty()) return false;
       List<Object> result = context.read(String.format("$..%s..sort", fieldName.replaceAll("\\.", "..")));
       return result.size() > 0;
     }

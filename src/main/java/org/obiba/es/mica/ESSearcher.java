@@ -27,6 +27,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
+import com.google.common.base.Suppliers;
 import com.google.common.collect.Lists;
 import org.elasticsearch.client.HttpAsyncResponseConsumerFactory;
 import org.elasticsearch.client.RequestOptions;
@@ -346,7 +347,7 @@ public class ESSearcher implements Searcher {
     co.elastic.clients.elasticsearch._types.query_dsl.Query filter = idFilter == null ? null
         : getIdQueryBuilder(idFilter);
 
-    RQLQuery query = new RQLQuery(rql);
+    RQLQuery query = new RQLQuery(rql, lazyIndexFieldMapping(indexName, type));
     co.elastic.clients.elasticsearch._types.query_dsl.Query queryBuilder = query.isEmpty() || !query.hasQueryBuilder()
         ? new MatchAllQuery.Builder().build()._toQuery()
         : ((ESQuery) query).getQueryBuilder();
@@ -422,6 +423,14 @@ public class ESSearcher implements Searcher {
     log.debug("Response /{}/{}", indexName, type);
 
     return new ESResponseCountResults(response);
+  }
+
+  /**
+   * The index field mapping, fetched on first use only (a request to Elasticsearch).
+   */
+  private java.util.function.Supplier<ESIndexFieldMapping> lazyIndexFieldMapping(String indexName, String type) {
+    return Suppliers.memoize(() -> esSearchService.getIndexer()
+        .getIndexfieldMapping(indexName, type) instanceof ESIndexFieldMapping mapping ? mapping : null)::get;
   }
 
   /**

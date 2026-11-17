@@ -22,6 +22,7 @@ import org.elasticsearch.search.sort.FieldSortBuilder;
 import org.elasticsearch.search.sort.SortBuilder;
 import org.elasticsearch.search.sort.SortBuilders;
 import org.elasticsearch.search.sort.SortOrder;
+import org.obiba.es.mica.ESIndexFieldMapping;
 import org.obiba.es.mica.ESQuery;
 import org.obiba.mica.spi.search.rql.RQLFieldResolver;
 import org.obiba.mica.spi.search.rql.RQLNode;
@@ -45,11 +46,15 @@ import co.elastic.clients.json.JsonData;
 
 import javax.annotation.Nullable;
 import java.util.*;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class RQLQuery implements ESQuery {
 
   private final RQLFieldResolver rqlFieldResolver;
+
+  @Nullable
+  private final Supplier<ESIndexFieldMapping> indexFieldMappingSupplier;
 
   private int from = 0;
 
@@ -81,7 +86,27 @@ public class RQLQuery implements ESQuery {
   }
 
   public RQLQuery(ASTNode node, RQLFieldResolver rqlFieldResolver) {
+    this(node, rqlFieldResolver, null);
+  }
+
+  /**
+   * @param rql the query
+   * @param indexFieldMappingSupplier the mapping of the queried index, used to sort on the case-insensitive sort
+   *                                  sub-fields; only called when the query sorts
+   */
+  public RQLQuery(String rql, @Nullable Supplier<ESIndexFieldMapping> indexFieldMappingSupplier) {
+    this(new RQLParser(new RQLConverter()).parse(rql), new RQLFieldResolver(null, Collections.emptyList(), "en",
+        null), indexFieldMappingSupplier);
+  }
+
+  /**
+   * @param indexFieldMappingSupplier the mapping of the queried index, used to sort on the case-insensitive sort
+   *                                  sub-fields; only called when the query sorts
+   */
+  public RQLQuery(ASTNode node, RQLFieldResolver rqlFieldResolver,
+                  @Nullable Supplier<ESIndexFieldMapping> indexFieldMappingSupplier) {
     this.rqlFieldResolver = rqlFieldResolver;
+    this.indexFieldMappingSupplier = indexFieldMappingSupplier;
     parseNode(node);
   }
 
@@ -297,10 +322,6 @@ public class RQLQuery implements ESQuery {
 
     protected RQLFieldResolver.FieldData resolveFieldUnanalyzed(String rqlField) {
       return rqlFieldResolver.resolveFieldUnanalyzed(rqlField);
-    }
-
-    protected RQLFieldResolver.FieldData resolveFieldForSort(String rqlField) {
-      return rqlFieldResolver.resolveFieldForSort(rqlField);
     }
 
     protected Vocabulary getVocabulary(String taxonomyName, String vocabularyName) {
@@ -762,11 +783,20 @@ public class RQLQuery implements ESQuery {
 
     private SortBuilder processArgument(String arg) {
       if (arg.startsWith("-"))
-        return SortBuilders.fieldSort(resolveFieldForSort(arg.substring(1)).getField()).order(SortOrder.DESC);
+        return SortBuilders.fieldSort(resolveSortField(arg.substring(1))).order(SortOrder.DESC);
       else if (arg.startsWith("+"))
-        return SortBuilders.fieldSort(resolveFieldForSort(arg.substring(1)).getField()).order(SortOrder.ASC);
+        return SortBuilders.fieldSort(resolveSortField(arg.substring(1))).order(SortOrder.ASC);
       else
-        return SortBuilders.fieldSort(resolveFieldForSort(arg).getField()).order(SortOrder.ASC);
+        return SortBuilders.fieldSort(resolveSortField(arg)).order(SortOrder.ASC);
+    }
+
+    /**
+     * Sort on the case-insensitive sort sub-field when the index has one, on the unanalyzed field otherwise.
+     */
+    private String resolveSortField(String rqlField) {
+      String field = resolveFieldUnanalyzed(rqlField).getField();
+      ESIndexFieldMapping mapping = indexFieldMappingSupplier == null ? null : indexFieldMappingSupplier.get();
+      return mapping == null ? field : mapping.getSortField(field);
     }
 
   }

@@ -42,13 +42,11 @@ public class NetworkIndexConfiguration extends AbstractIndexConfiguration {
         Indexer.PUBLISHED_NETWORK_INDEX.equals(indexName)) {
       try {
         XContentBuilder properties = createMappingProperties();
-        String mappingJson = Strings.toString(properties);
-        log.info("Applying network index mapping for '{}': {}", indexName, mappingJson);
 
         getClient(searchEngineService)
             .indices()
             .putMapping(
-                PutMappingRequest.of(r -> r.index(indexName).withJson(new StringReader(mappingJson))));
+                PutMappingRequest.of(r -> r.index(indexName).withJson(new StringReader(Strings.toString(properties)))));
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
