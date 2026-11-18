@@ -89,6 +89,15 @@ public class IndexFieldMappingImplTest {
   }
 
   @Test
+  public void test_only_exact_field_path_is_sortable() {
+    ESIndexFieldMapping mapping = new ESIndexer.IndexFieldMappingImpl(context(), true);
+    assertThat(mapping.isSortable("acronym")).isFalse();
+    assertThat(mapping.isSortable("en")).isFalse();
+    assertThat(mapping.isSortable("acronym.en.sort")).isFalse();
+    assertThat(mapping.getSortField("acronym")).isEqualTo("acronym");
+  }
+
+  @Test
   public void test_analyzed_unchanged() {
     ESIndexFieldMapping mapping = new ESIndexer.IndexFieldMappingImpl(context(), true);
     assertThat(mapping.isAnalyzed("acronym.en")).isTrue();

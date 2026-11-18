@@ -279,6 +279,7 @@ public class ESIndexer implements Indexer {
       GetMappingResponse result = getClient().indices().getMapping(GetMappingRequest.of(r -> r.index(indexName)));
       Map<String, IndexMappingRecord> mappings = result.result();
       IndexMappingRecord record = mappings.get(indexName);
+      if (record == null) return null; // e.g. an alias, the mapping is keyed by the concrete index name
 
       Map<String, Property> mappingProperties = record.mappings().properties();
 
@@ -414,21 +415,15 @@ public class ESIndexer implements Indexer {
     @Override
     public boolean isSortable(String fieldName) {
       if (!caseInsensitiveSort || context == null || fieldName == null || fieldName.isEmpty()) return false;
-      List<Object> result = context.read(deepScanPath(fieldName, "sort"));
-      return result.size() > 0;
-    }
-
-    /**
-     * Deep scan path of the field's sub-field, with each field name segment quoted so that JsonPath special
-     * characters (e.g. in attribute names) do not break the expression.
-     */
-    @VisibleForTesting
-    static String deepScanPath(String fieldName, String subField) {
-      StringBuilder path = new StringBuilder("$");
+      // walk the exact field path (no JsonPath, so field names need no escaping): objects nest their fields in
+      // "properties", the sort sub-field is in the field's own "fields"
+      Object node = Map.of("properties", context.json());
       for (String segment : fieldName.split("\\.")) {
-        path.append("..['").append(segment.replace("\\", "\\\\").replace("'", "\\'")).append("']");
+        node = node instanceof Map<?, ?> map && map.get("properties") instanceof Map<?, ?> properties
+            ? properties.get(segment) : null;
       }
-      return path.append("..").append(subField).toString();
+      return node instanceof Map<?, ?> map && map.get("fields") instanceof Map<?, ?> fields
+          && fields.containsKey("sort");
     }
 
   }

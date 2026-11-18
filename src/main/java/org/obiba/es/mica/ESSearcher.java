@@ -26,6 +26,7 @@ import co.elastic.clients.elasticsearch.core.search.TrackHits;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
 import com.google.common.base.Suppliers;
@@ -34,6 +35,7 @@ import org.elasticsearch.client.HttpAsyncResponseConsumerFactory;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.index.IndexNotFoundException;
+import org.elasticsearch.search.sort.FieldSortBuilder;
 import org.elasticsearch.search.sort.SortBuilder;
 import org.obiba.es.mica.query.AndQuery;
 import org.obiba.es.mica.query.RQLJoinQuery;
@@ -142,7 +144,7 @@ public class ESSearcher implements Searcher {
     List<SortOptions> sortOptions = new ArrayList<>();
 
     if (!query.isEmpty()) {
-      sortOptions.addAll(toSortOptions(((ESQuery) query).getSortBuilders()));
+      sortOptions.addAll(toSortOptions(((ESQuery) query).getSortBuilders(), lazyIndexFieldMapping(indexName, type)));
     } else {
       sortOptions.add(new SortOptions.Builder()
           .score(score -> score.order(co.elastic.clients.elasticsearch._types.SortOrder.Desc)).build());
@@ -339,7 +341,7 @@ public class ESSearcher implements Searcher {
     co.elastic.clients.elasticsearch._types.query_dsl.Query filter = idFilter == null ? null
         : getIdQueryBuilder(idFilter);
 
-    RQLQuery query = new RQLQuery(rql, lazyIndexFieldMapping(indexName, type));
+    RQLQuery query = new RQLQuery(rql);
     co.elastic.clients.elasticsearch._types.query_dsl.Query queryBuilder = query.isEmpty() || !query.hasQueryBuilder()
         ? new MatchAllQuery.Builder().build()._toQuery()
         : ((ESQuery) query).getQueryBuilder();
@@ -357,7 +359,7 @@ public class ESSearcher implements Searcher {
       List<SortOptions> sortOptions = new ArrayList<>();
 
       if (query.hasSortBuilders()) {
-        sortOptions.addAll(toSortOptions(query.getSortBuilders()));
+        sortOptions.addAll(toSortOptions(query.getSortBuilders(), lazyIndexFieldMapping(indexName, type)));
       } else {
         sortOptions.add(new SortOptions.Builder()
             .score(score -> score.order(co.elastic.clients.elasticsearch._types.SortOrder.Desc)).build());
@@ -410,26 +412,39 @@ public class ESSearcher implements Searcher {
 
   /**
    * Translate the legacy sort builders, keeping the unmapped type and missing options so that sorting on a field
-   * absent from the index mapping does not fail.
+   * absent from the index mapping does not fail. A field with the case-insensitive sort sub-field in the searched
+   * index is sorted on it, then on the field itself so that values differing only by case or accents keep a stable
+   * order.
+   *
+   * @param mapping the mapping of the searched index, fetched only when a field (other than _score) is sorted
    */
-  private List<SortOptions> toSortOptions(List<SortBuilder> sortBuilders) throws IOException {
+  @VisibleForTesting
+  static List<SortOptions> toSortOptions(List<SortBuilder> sortBuilders,
+                                         java.util.function.Supplier<ESIndexFieldMapping> mapping) {
     List<SortOptions> sortOptions = new ArrayList<>();
     for (SortBuilder sortBuilder : sortBuilders) {
-      JsonNode sortJson = objectMapper.readTree(sortBuilder.toString());
-      String fieldName = sortJson.fieldNames().next();
-      JsonNode options = sortJson.get(fieldName);
-      co.elastic.clients.elasticsearch._types.SortOrder order = sortBuilder.order() == org.elasticsearch.search.sort.SortOrder.DESC
-          ? co.elastic.clients.elasticsearch._types.SortOrder.Desc
-          : co.elastic.clients.elasticsearch._types.SortOrder.Asc;
+      FieldSortBuilder fieldSortBuilder = (FieldSortBuilder) sortBuilder;
+      String fieldName = fieldSortBuilder.getFieldName();
+      String sortField = "_score".equals(fieldName) || mapping.get() == null
+          ? fieldName
+          : mapping.get().getSortField(fieldName);
 
-      sortOptions.add(SortOptions.of(s -> s.field(field -> {
-        field.field(fieldName).order(order);
-        if (options.has("unmapped_type")) field.unmappedType(FieldType.Keyword);
-        if (options.has("missing")) field.missing(options.get("missing").asText());
-        return field;
-      })));
+      sortOptions.add(toSortOption(fieldSortBuilder, sortField));
+      if (!sortField.equals(fieldName)) sortOptions.add(toSortOption(fieldSortBuilder, fieldName));
     }
     return sortOptions;
+  }
+
+  private static SortOptions toSortOption(FieldSortBuilder sortBuilder, String fieldName) {
+    co.elastic.clients.elasticsearch._types.SortOrder order = sortBuilder.order() == org.elasticsearch.search.sort.SortOrder.DESC
+        ? co.elastic.clients.elasticsearch._types.SortOrder.Desc
+        : co.elastic.clients.elasticsearch._types.SortOrder.Asc;
+    return SortOptions.of(s -> s.field(field -> {
+      field.field(fieldName).order(order);
+      if (sortBuilder.unmappedType() != null) field.unmappedType(FieldType.Keyword);
+      if (sortBuilder.missing() != null) field.missing(sortBuilder.missing().toString());
+      return field;
+    }));
   }
 
   /**

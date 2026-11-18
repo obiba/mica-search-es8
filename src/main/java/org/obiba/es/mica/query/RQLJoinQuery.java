@@ -10,11 +10,9 @@
 
 package org.obiba.es.mica.query;
 
-import com.google.common.base.Suppliers;
 import net.jazdw.rql.parser.ASTNode;
 import net.jazdw.rql.parser.RQLParser;
 import org.elasticsearch.common.Strings;
-import org.obiba.es.mica.ESIndexFieldMapping;
 import org.obiba.mica.spi.search.ConfigurationProvider;
 import org.obiba.mica.spi.search.IndexFieldMapping;
 import org.obiba.mica.spi.search.Indexer;
@@ -29,7 +27,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-import java.util.function.Supplier;
 
 import static java.util.stream.Collectors.toList;
 
@@ -142,20 +139,20 @@ public class RQLJoinQuery implements JoinQuery {
     nodeTypes.add(rqlNode);
     switch (rqlNode) {
       case VARIABLE:
-        IndexFieldMapping variableMapping = getVariableIndexMapping();
-        variableQuery = newQuery(node, rqlNode, getVariableTaxonomies(), variableMapping, () -> variableMapping);
+        variableQuery = new RQLQuery(node, new RQLFieldResolver(rqlNode, getVariableTaxonomies(), locale,
+            getVariableIndexMapping()));
         break;
       case DATASET:
-        datasetQuery = newQuery(node, rqlNode, getDatasetTaxonomies(), getDatasetIndexMapping(),
-            () -> getMapping(Indexer.PUBLISHED_DATASET_INDEX, Indexer.DATASET_TYPE));
+        datasetQuery = new RQLQuery(node, new RQLFieldResolver(rqlNode, getDatasetTaxonomies(), locale,
+            getDatasetIndexMapping()));
         break;
       case STUDY:
-        studyQuery = newQuery(node, rqlNode, getStudyTaxonomies(), getStudyIndexMapping(),
-            () -> getMapping(Indexer.PUBLISHED_STUDY_INDEX, Indexer.STUDY_TYPE));
+        studyQuery = new RQLQuery(node, new RQLFieldResolver(rqlNode, getStudyTaxonomies(), locale,
+            getStudyIndexMapping()));
         break;
       case NETWORK:
-        networkQuery = newQuery(node, rqlNode, getNetworkTaxonomies(), getNetworkIndexMapping(),
-            () -> getMapping(Indexer.PUBLISHED_NETWORK_INDEX, Indexer.NETWORK_TYPE));
+        networkQuery = new RQLQuery(node, new RQLFieldResolver(rqlNode, getNetworkTaxonomies(), locale,
+            getNetworkIndexMapping()));
         break;
       case LOCALE:
         if (node.getArgumentsSize() > 0)
@@ -165,15 +162,6 @@ public class RQLJoinQuery implements JoinQuery {
         withFacets = true;
         break;
     }
-  }
-
-  /**
-   * @param sortMapping the mapping of the searched (published) index, fetched only when the query sorts
-   */
-  private RQLQuery newQuery(ASTNode node, RQLNode rqlNode, List<Taxonomy> taxonomies, IndexFieldMapping mapping,
-                            Supplier<IndexFieldMapping> sortMapping) {
-    return new RQLQuery(node, new RQLFieldResolver(rqlNode, taxonomies, locale, mapping),
-        Suppliers.memoize(() -> sortMapping.get() instanceof ESIndexFieldMapping m ? m : null)::get);
   }
 
   private void initializeLocale(ASTNode node) {
