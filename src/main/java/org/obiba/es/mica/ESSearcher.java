@@ -13,6 +13,7 @@ package org.obiba.es.mica;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.FieldSort;
 import co.elastic.clients.elasticsearch._types.SortOptions;
+import co.elastic.clients.elasticsearch._types.mapping.FieldType;
 import co.elastic.clients.elasticsearch._types.aggregations.Aggregation;
 import co.elastic.clients.elasticsearch._types.aggregations.GlobalAggregation;
 import co.elastic.clients.elasticsearch._types.aggregations.TermsAggregation;
@@ -141,16 +142,7 @@ public class ESSearcher implements Searcher {
     List<SortOptions> sortOptions = new ArrayList<>();
 
     if (!query.isEmpty()) {
-      for (SortBuilder sortBuilder : ((ESQuery) query).getSortBuilders()) {
-        JsonNode sortJson = objectMapper.readTree(sortBuilder.toString());
-        String fieldName = sortJson.fieldNames().next();
-
-        String capitalizedOrder = sortBuilder.order().name().substring(0, 1).toUpperCase()
-            + sortBuilder.order().name().substring(1).toLowerCase();
-
-        sortOptions.add(new SortOptions.Builder().field(field -> field.field(fieldName)
-            .order(co.elastic.clients.elasticsearch._types.SortOrder.valueOf(capitalizedOrder))).build());
-      }
+      sortOptions.addAll(toSortOptions(((ESQuery) query).getSortBuilders()));
     } else {
       sortOptions.add(new SortOptions.Builder()
           .score(score -> score.order(co.elastic.clients.elasticsearch._types.SortOrder.Desc)).build());
@@ -365,16 +357,7 @@ public class ESSearcher implements Searcher {
       List<SortOptions> sortOptions = new ArrayList<>();
 
       if (query.hasSortBuilders()) {
-        for (SortBuilder sortBuilder : query.getSortBuilders()) {
-          JsonNode sortJson = objectMapper.readTree(sortBuilder.toString());
-          String fieldName = sortJson.fieldNames().next();
-
-          String capitalizedOrder = sortBuilder.order().name().substring(0, 1).toUpperCase()
-              + sortBuilder.order().name().substring(1).toLowerCase();
-
-          sortOptions.add(new SortOptions.Builder().field(field -> field.field(fieldName)
-              .order(co.elastic.clients.elasticsearch._types.SortOrder.valueOf(capitalizedOrder))).build());
-        }
+        sortOptions.addAll(toSortOptions(query.getSortBuilders()));
       } else {
         sortOptions.add(new SortOptions.Builder()
             .score(score -> score.order(co.elastic.clients.elasticsearch._types.SortOrder.Desc)).build());
@@ -423,6 +406,30 @@ public class ESSearcher implements Searcher {
     log.debug("Response /{}/{}", indexName, type);
 
     return new ESResponseCountResults(response);
+  }
+
+  /**
+   * Translate the legacy sort builders, keeping the unmapped type and missing options so that sorting on a field
+   * absent from the index mapping does not fail.
+   */
+  private List<SortOptions> toSortOptions(List<SortBuilder> sortBuilders) throws IOException {
+    List<SortOptions> sortOptions = new ArrayList<>();
+    for (SortBuilder sortBuilder : sortBuilders) {
+      JsonNode sortJson = objectMapper.readTree(sortBuilder.toString());
+      String fieldName = sortJson.fieldNames().next();
+      JsonNode options = sortJson.get(fieldName);
+      co.elastic.clients.elasticsearch._types.SortOrder order = sortBuilder.order() == org.elasticsearch.search.sort.SortOrder.DESC
+          ? co.elastic.clients.elasticsearch._types.SortOrder.Desc
+          : co.elastic.clients.elasticsearch._types.SortOrder.Asc;
+
+      sortOptions.add(SortOptions.of(s -> s.field(field -> {
+        field.field(fieldName).order(order);
+        if (options.has("unmapped_type")) field.unmappedType(FieldType.Keyword);
+        if (options.has("missing")) field.missing(options.get("missing").asText());
+        return field;
+      })));
+    }
+    return sortOptions;
   }
 
   /**

@@ -281,9 +281,9 @@ public abstract class AbstractIndexConfiguration implements Indexer.IndexConfigu
     if (getTarget() != null) {
       SchemaNode root = new SchemaNode();
       taxonomy.getVocabularies().forEach(v -> {
-        String fieldName = v.getAttributeValue(FIELD);
+        String field = v.getAttributeValue(FIELD);
+        String fieldName = field != null ? field : v.getName();
         if (!ignore.contains(fieldName)) {
-          fieldName = fieldName != null ? fieldName : v.getName();
           List<String> path = Lists.newArrayList(fieldName.split("\\."));
 
           if (TRUE.equals(v.getAttributeValue(LOCALIZED)) && "und".equals(path.get(path.size() - 1))) {

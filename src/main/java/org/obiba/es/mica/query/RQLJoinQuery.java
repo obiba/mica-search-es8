@@ -10,6 +10,7 @@
 
 package org.obiba.es.mica.query;
 
+import com.google.common.base.Suppliers;
 import net.jazdw.rql.parser.ASTNode;
 import net.jazdw.rql.parser.RQLParser;
 import org.elasticsearch.common.Strings;
@@ -28,6 +29,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 import static java.util.stream.Collectors.toList;
 
@@ -140,16 +142,20 @@ public class RQLJoinQuery implements JoinQuery {
     nodeTypes.add(rqlNode);
     switch (rqlNode) {
       case VARIABLE:
-        variableQuery = newQuery(node, rqlNode, getVariableTaxonomies(), getVariableIndexMapping());
+        IndexFieldMapping variableMapping = getVariableIndexMapping();
+        variableQuery = newQuery(node, rqlNode, getVariableTaxonomies(), variableMapping, () -> variableMapping);
         break;
       case DATASET:
-        datasetQuery = newQuery(node, rqlNode, getDatasetTaxonomies(), getDatasetIndexMapping());
+        datasetQuery = newQuery(node, rqlNode, getDatasetTaxonomies(), getDatasetIndexMapping(),
+            () -> getMapping(Indexer.PUBLISHED_DATASET_INDEX, Indexer.DATASET_TYPE));
         break;
       case STUDY:
-        studyQuery = newQuery(node, rqlNode, getStudyTaxonomies(), getStudyIndexMapping());
+        studyQuery = newQuery(node, rqlNode, getStudyTaxonomies(), getStudyIndexMapping(),
+            () -> getMapping(Indexer.PUBLISHED_STUDY_INDEX, Indexer.STUDY_TYPE));
         break;
       case NETWORK:
-        networkQuery = newQuery(node, rqlNode, getNetworkTaxonomies(), getNetworkIndexMapping());
+        networkQuery = newQuery(node, rqlNode, getNetworkTaxonomies(), getNetworkIndexMapping(),
+            () -> getMapping(Indexer.PUBLISHED_NETWORK_INDEX, Indexer.NETWORK_TYPE));
         break;
       case LOCALE:
         if (node.getArgumentsSize() > 0)
@@ -161,9 +167,13 @@ public class RQLJoinQuery implements JoinQuery {
     }
   }
 
-  private RQLQuery newQuery(ASTNode node, RQLNode rqlNode, List<Taxonomy> taxonomies, IndexFieldMapping mapping) {
-    ESIndexFieldMapping esMapping = mapping instanceof ESIndexFieldMapping m ? m : null;
-    return new RQLQuery(node, new RQLFieldResolver(rqlNode, taxonomies, locale, mapping), () -> esMapping);
+  /**
+   * @param sortMapping the mapping of the searched (published) index, fetched only when the query sorts
+   */
+  private RQLQuery newQuery(ASTNode node, RQLNode rqlNode, List<Taxonomy> taxonomies, IndexFieldMapping mapping,
+                            Supplier<IndexFieldMapping> sortMapping) {
+    return new RQLQuery(node, new RQLFieldResolver(rqlNode, taxonomies, locale, mapping),
+        Suppliers.memoize(() -> sortMapping.get() instanceof ESIndexFieldMapping m ? m : null)::get);
   }
 
   private void initializeLocale(ASTNode node) {

@@ -81,6 +81,14 @@ public class IndexFieldMappingImplTest {
   }
 
   @Test
+  public void test_special_characters_in_field_name_do_not_fail() {
+    ESIndexFieldMapping mapping = new ESIndexer.IndexFieldMappingImpl(context(), true);
+    assertThat(mapping.isSortable("attributes.Mlstr-area.und")).isFalse();
+    assertThat(mapping.isSortable("attributes.a[0]*'b c.und")).isFalse();
+    assertThat(mapping.isSortable("acronym.en")).isTrue();
+  }
+
+  @Test
   public void test_analyzed_unchanged() {
     ESIndexFieldMapping mapping = new ESIndexer.IndexFieldMappingImpl(context(), true);
     assertThat(mapping.isAnalyzed("acronym.en")).isTrue();

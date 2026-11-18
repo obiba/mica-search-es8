@@ -414,8 +414,21 @@ public class ESIndexer implements Indexer {
     @Override
     public boolean isSortable(String fieldName) {
       if (!caseInsensitiveSort || context == null || fieldName == null || fieldName.isEmpty()) return false;
-      List<Object> result = context.read(String.format("$..%s..sort", fieldName.replaceAll("\\.", "..")));
+      List<Object> result = context.read(deepScanPath(fieldName, "sort"));
       return result.size() > 0;
+    }
+
+    /**
+     * Deep scan path of the field's sub-field, with each field name segment quoted so that JsonPath special
+     * characters (e.g. in attribute names) do not break the expression.
+     */
+    @VisibleForTesting
+    static String deepScanPath(String fieldName, String subField) {
+      StringBuilder path = new StringBuilder("$");
+      for (String segment : fieldName.split("\\.")) {
+        path.append("..['").append(segment.replace("\\", "\\\\").replace("'", "\\'")).append("']");
+      }
+      return path.append("..").append(subField).toString();
     }
 
   }
