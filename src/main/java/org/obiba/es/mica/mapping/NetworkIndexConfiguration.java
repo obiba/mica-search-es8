@@ -59,11 +59,14 @@ public class NetworkIndexConfiguration extends AbstractIndexConfiguration {
     mapping.startObject("properties");
     Taxonomy taxonomy = getTaxonomy();
     taxonomy.addVocabulary(newVocabularyBuilder().name("raw_id").field("id").staticField().build());
-    addLocalizedVocabularies(taxonomy, "acronym", "name", "description");
+    addLocalizedVocabularies(taxonomy, "description");
     List<String> ignore = Lists.newArrayList(
-        "id");
+        "id", "acronym", "name");
 
     addTaxonomyFields(mapping, taxonomy, ignore);
+
+    createLocalizedMappingWithAnalyzersAndSort(mapping, "acronym");
+    createLocalizedMappingWithAnalyzersAndSort(mapping, "name");
 
     mapping.endObject().endObject();
     return mapping;

@@ -12,6 +12,7 @@ package org.obiba.es.mica;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Iterables;
 import com.jayway.jsonpath.Configuration;
 import com.jayway.jsonpath.JsonPath;
@@ -264,8 +265,9 @@ public class ESIndexer implements Indexer {
   }
 
   @Override
-  public IndexFieldMapping getIndexfieldMapping(String indexName, String type) {
-    return new IndexFieldMappingImpl(hasIndex(indexName) ? getContext(indexName, type) : null);
+  public ESIndexFieldMapping getIndexfieldMapping(String indexName, String type) {
+    return new IndexFieldMappingImpl(hasIndex(indexName) ? getContext(indexName, type) : null,
+        esSearchService.isCaseInsensitiveSort());
   }
 
   //
@@ -277,6 +279,7 @@ public class ESIndexer implements Indexer {
       GetMappingResponse result = getClient().indices().getMapping(GetMappingRequest.of(r -> r.index(indexName)));
       Map<String, IndexMappingRecord> mappings = result.result();
       IndexMappingRecord record = mappings.get(indexName);
+      if (record == null) return null; // e.g. an alias, the mapping is keyed by the concrete index name
 
       Map<String, Property> mappingProperties = record.mappings().properties();
 
@@ -386,12 +389,16 @@ public class ESIndexer implements Indexer {
     return null;
   }
 
-  private static class IndexFieldMappingImpl implements IndexFieldMapping {
+  @VisibleForTesting
+  static class IndexFieldMappingImpl implements ESIndexFieldMapping {
 
     private final ReadContext context;
 
-    IndexFieldMappingImpl(ReadContext ctx) {
+    private final boolean caseInsensitiveSort;
+
+    IndexFieldMappingImpl(ReadContext ctx, boolean caseInsensitiveSort) {
       this.context = ctx;
+      this.caseInsensitiveSort = caseInsensitiveSort;
     }
 
     @Override
@@ -403,6 +410,20 @@ public class ESIndexer implements Indexer {
       }
 
       return analyzed;
+    }
+
+    @Override
+    public boolean isSortable(String fieldName) {
+      if (!caseInsensitiveSort || context == null || fieldName == null || fieldName.isEmpty()) return false;
+      // walk the exact field path (no JsonPath, so field names need no escaping): objects nest their fields in
+      // "properties", the sort sub-field is in the field's own "fields"
+      Object node = Map.of("properties", context.json());
+      for (String segment : fieldName.split("\\.")) {
+        node = node instanceof Map<?, ?> map && map.get("properties") instanceof Map<?, ?> properties
+            ? properties.get(segment) : null;
+      }
+      return node instanceof Map<?, ?> map && map.get("fields") instanceof Map<?, ?> fields
+          && fields.containsKey("sort");
     }
 
   }

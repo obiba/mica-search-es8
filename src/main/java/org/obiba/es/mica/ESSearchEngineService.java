@@ -299,6 +299,13 @@ public class ESSearchEngineService implements SearchEngineService {
     return e instanceof ConnectException || e instanceof UnknownHostException || e instanceof ConnectionClosedException;
   }
 
+  /**
+   * Whether sorting uses the case-insensitive sort sub-fields of the index mapping (default true).
+   */
+  boolean isCaseInsensitiveSort() {
+    return properties == null || Boolean.parseBoolean(properties.getProperty("sort.caseInsensitive", "true"));
+  }
+
   private boolean isDataNode() {
     return Boolean.parseBoolean(properties.getProperty("dataNode", "true"));
   }
